@@ -63,13 +63,14 @@ class Events
      */
     public static function onMessage($client_id, $message)
     {
-
         $data = json_decode($message, true);
 
         Gateway::sendToAll("{$message}\r\n");
         //绑定客户端id
         switch ($data['action']) {
             case 'login':
+                //将客户端id绑定uid
+                $_SESSION['UID'] = $data['user']['id'];
                 Gateway::bindUid($client_id, $data['user']['id']);
                 //查询是否有添加信息
                 $addmsg = self::$db->select('type')
@@ -83,8 +84,9 @@ class Events
                         "您的申请列表中有未读信息，请去申请信息菜单中查看\r\n"
                     );
                 }
-                // TODO 修改在线状态
-                // 向所有人发送 
+                self::$db->update('chat_member')->cols(['status' => '0'])->where('id=' . $data['user']['id'])->query();
+
+                // 向所有人发送 ，可以只对在线好友发送
                 Gateway::sendToAll("{$data['user']['name']} 已经上线\r\n");
                 break;
             case 'addfriend':
@@ -122,8 +124,11 @@ class Events
      */
     public static function onClose($client_id)
     {
-        // TODO 修改数据库登录状态
-
+        $uidList = Gateway::getClientIdByUid($_SESSION['UID']);
+        if ($uidList == null) {
+            // TODO 修改数据库登录状态
+            self::$db->update('chat_member')->cols(['status' => '1'])->where('id=' . $_SESSION['UID'])->query();
+        }
         // 向所有人发送 
         GateWay::sendToAll("$client_id logout\r\n");
     }
