@@ -86,7 +86,7 @@ class Events
                 }
                 self::$db->update('chat_member')->cols(['status' => '0'])->where('id=' . $data['user']['id'])->query();
 
-                // 向所有人发送 ，可以只对在线好友发送
+                // 向所有人发送 ，可以只对在线好友发送,功能未实现
                 Gateway::sendToAll("{$data['user']['name']} 已经上线\r\n");
                 break;
             case 'addfriend':
@@ -113,7 +113,9 @@ class Events
                     $data['data']['msg'] . "\r\n"
                 );
                 break;
+            case 'addGroup':
 
+                break;
         }
 
     }
@@ -126,7 +128,6 @@ class Events
     {
         $uidList = Gateway::getClientIdByUid($_SESSION['UID']);
         if ($uidList == null) {
-            // TODO 修改数据库登录状态
             self::$db->update('chat_member')->cols(['status' => '1'])->where('id=' . $_SESSION['UID'])->query();
         }
         // 向所有人发送 
