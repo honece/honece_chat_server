@@ -69,6 +69,7 @@ class Events
         //绑定客户端id
         switch ($data['action']) {
             case 'login':
+                //登录初始化
                 //将客户端id绑定uid
                 $_SESSION['UID'] = $data['user']['id'];
                 Gateway::bindUid($client_id, $data['user']['id']);
@@ -90,7 +91,7 @@ class Events
                 Gateway::sendToAll("{$data['user']['name']} 已经上线\r\n");
                 break;
             case 'addfriend':
-                //添加消息
+                //添加好友消息
                 $insert_id = self::$db->insert('chat_msgbox')->cols(
                     [
                         'send' => $data['user']['id'],
@@ -106,6 +107,7 @@ class Events
                 }
                 break;
             case 'chat':
+                //好友聊天
                 Gateway::sendToUid(
                     $data['data']['friend_id'],
                     'user:' . $data['user']['name'] . "\t" .
@@ -114,7 +116,22 @@ class Events
                 );
                 break;
             case 'addGroup':
+                //添加群消息
+                $insert_id = self::$db->insert('chat_msgbox')->cols(
+                    [
+                        'send'     => $data['user']['id'],
+                        'recv'     => $data['data']['recv_id'],
+                        'type'     => '2',
+                        'group_id' => $data['data']['group_id']
+                    ]
+                )->query();
 
+                if (Gateway::isUidOnline($data['data']['recv_id'])) {
+                    Gateway::sendToUid(
+                        $data['data']['recv_id'],
+                        $data['user']['name'] . "申请加群，请去申请信息菜单中查看\r\n"
+                    );
+                }
                 break;
         }
 
@@ -126,6 +143,7 @@ class Events
      */
     public static function onClose($client_id)
     {
+        //成员下线
         $uidList = Gateway::getClientIdByUid($_SESSION['UID']);
         if ($uidList == null) {
             self::$db->update('chat_member')->cols(['status' => '1'])->where('id=' . $_SESSION['UID'])->query();
