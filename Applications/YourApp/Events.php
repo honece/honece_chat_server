@@ -65,19 +65,30 @@ class Events
     {
         $data = json_decode($message, true);
 
-        Gateway::sendToAll("{$message}\r\n");
+        // Gateway::sendToAll("{$message}\r\n");
         //绑定客户端id
         switch ($data['action']) {
             case 'login':
                 //登录初始化
+                //客户端绑定群
+                $addmsg = self::$db->select('group_id')
+                    ->from('chat_group_member')
+                    ->where('member_id = ' . $data['user']['id'])
+                    ->column();
+                if ($addmsg) {
+                    foreach ($addmsg as $key => $groupId) {
+                        Gateway::joinGroup($client_id, $groupId);
+                    }
+                }
                 //将客户端id绑定uid
                 $_SESSION['UID'] = $data['user']['id'];
                 Gateway::bindUid($client_id, $data['user']['id']);
-                //查询是否有添加信息
+
+                //查询是否有申请信息
                 $addmsg = self::$db->select('type')
                     ->from('chat_msgbox')
                     ->where('recv = ' . $data['user']['id'])
-                    ->where('type = 0')
+                    ->where('status = 0')
                     ->column();
                 if ($addmsg) {
                     Gateway::sendToUid(
@@ -85,13 +96,14 @@ class Events
                         "您的申请列表中有未读信息，请去申请信息菜单中查看\r\n"
                     );
                 }
+                //更改在线状态
                 self::$db->update('chat_member')->cols(['status' => '0'])->where('id=' . $data['user']['id'])->query();
 
                 // 向所有人发送 ，可以只对在线好友发送,功能未实现
                 Gateway::sendToAll("{$data['user']['name']} 已经上线\r\n");
                 break;
             case 'addfriend':
-                //添加好友消息
+                //添加申请好友消息
                 $insert_id = self::$db->insert('chat_msgbox')->cols(
                     [
                         'send' => $data['user']['id'],
@@ -106,17 +118,8 @@ class Events
                     );
                 }
                 break;
-            case 'chat':
-                //好友聊天
-                Gateway::sendToUid(
-                    $data['data']['friend_id'],
-                    'user:' . $data['user']['name'] . "\t" .
-                    date('Y-m-d H:i:s') . "\t" .
-                    $data['data']['msg'] . "\r\n"
-                );
-                break;
             case 'addGroup':
-                //添加群消息
+                //添加申请入群消息
                 $insert_id = self::$db->insert('chat_msgbox')->cols(
                     [
                         'send'     => $data['user']['id'],
@@ -133,6 +136,38 @@ class Events
                     );
                 }
                 break;
+            case 'chat':
+                //好友聊天
+                Gateway::sendToUid(
+                    $data['data']['friend_id'],
+                    "收到新的好友消息\r\n" .
+                    'user:' . $data['user']['name'] . "\t" .
+                    date('Y-m-d H:i:s') . "\t" .
+                    $data['data']['msg'] . "\r\n"
+                );
+                break;
+            case 'chatGroup':
+                Gateway::sendToGroup(
+                    $data['data']['group_id'],
+                    //消息大概是 :
+                    // xxx:     2023-03-20 00:00:00
+                    //   消息内容
+                    //这种格式
+                    "收到新的群消息\r\n" .
+                    $data['user']['name'] . ":\t" . date('Y-m-d H:i:s') . "\r\n\t" .
+                    $data['data']['msg'] . "\r\n"
+                );
+                break;
+            case 'joinGroup':
+                //绑定uid进组
+                $clientIds = Gateway::getClientIdByUid($data['data']['member_id']);
+                foreach ($clientIds as $key => $value) {
+                    Gateway::joinGroup($value, $data['data']['group_id']);
+                }
+                if ($data['data']['member_id'] != $data['user']['id']) {
+                    Gateway::sendToUid($data['data']['member_id'], "您的群组申请已通过\r\n");
+                }
+                break;
         }
 
     }
@@ -145,7 +180,7 @@ class Events
     {
         //成员下线
         $uidList = Gateway::getClientIdByUid($_SESSION['UID']);
-        if ($uidList == null) {
+        if (empty($uidList) && !empty($_SESSION['UID'])) {
             self::$db->update('chat_member')->cols(['status' => '1'])->where('id=' . $_SESSION['UID'])->query();
         }
         // 向所有人发送 
